@@ -1633,7 +1633,8 @@ if _enabled:
                 if name in class_annotations:
                     the_type = torch.jit.annotations.ann_to_type(class_annotations[name])
                 else:
-                    the_type = torch.jit.annotations.try_to_infer_type(item)
+                    the_type = torch._C._try_to_infer_type(item)
+                    print("INferred type: ", the_type)
                 if the_type is not None:
                     self._c._register_attribute(name, the_type, item)
 

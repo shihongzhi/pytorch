@@ -617,6 +617,10 @@ void initJitScriptBindings(PyObject* module) {
     return Decl(p.parseTypeComment());
   });
 
+  m.def("_try_to_infer_type", [](py::object value) {
+    return tryToInferType(value);
+  });
+
   m.def("merge_type_from_type_comment", &mergeTypesFromTypeComment);
   m.def(
       "import_ir_module",
