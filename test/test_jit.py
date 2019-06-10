@@ -13156,7 +13156,6 @@ class TestRecursiveScript(JitTestCase):
             def forward(self, t):
                 return self.other(t) * 2
 
-
         self.checkModule(M(), (torch.ones(2, 2),))
 
     def test_iterable_modules(self):
