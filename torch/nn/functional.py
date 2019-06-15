@@ -1719,6 +1719,13 @@ def instance_norm(input, running_mean=None, running_var=None, weight=None,
     See :class:`~torch.nn.InstanceNorm1d`, :class:`~torch.nn.InstanceNorm2d`,
     :class:`~torch.nn.InstanceNorm3d` for details.
     """
+    size = input.size()
+    size_prods = size[0]
+    for i in range(len(size) - 2):
+        size_prods *= size[i + 2]
+    if size_prods == 1:
+        raise ValueError('Expected more than 1 value per channel, got input size {}'.format(size))
+
     return torch.instance_norm(
         input, weight, bias, running_mean, running_var,
         use_input_stats, momentum, eps, torch.backends.cudnn.enabled
@@ -1743,6 +1750,13 @@ def group_norm(input, num_groups, weight=None, bias=None, eps=1e-5):
 
     See :class:`~torch.nn.GroupNorm` for details.
     """
+    size = input.size()
+    size_prods = size[0]
+    for i in range(len(size) - 2):
+        size_prods *= size[i + 2]
+    if size_prods == 1:
+        raise ValueError('Expected more than 1 value per channel got input size {}'.format(size))
+
     return torch.group_norm(input, num_groups, weight, bias, eps,
                             torch.backends.cudnn.enabled)
 
