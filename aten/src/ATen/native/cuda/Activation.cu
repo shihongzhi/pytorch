@@ -356,7 +356,7 @@ void glu_kernel(TensorIterator& iter) {
   AT_DISPATCH_FLOATING_TYPES_AND2(at::ScalarType::Half, at::ScalarType::BFloat16, iter.dtype(), "glu_cuda", [&]() {
     AT_SKIP_BFLOAT16_IF_NOT_ROCM(scalar_t, "glu_cuda", [&] {
       gpu_kernel(iter, []GPU_LAMBDA(scalar_t a, scalar_t b) -> scalar_t {
-        return a * (scalar_t(1.) / (scalar_t(1.) + (static_cast<scalar_t>(std::exp(-b))));
+        return a * (scalar_t(1.) / (scalar_t(1.) + (static_cast<scalar_t>(std::exp(-b)))));
       });
     });
   });
@@ -485,7 +485,7 @@ REGISTER_DISPATCH(leaky_relu_stub, &leaky_relu_kernel);
 REGISTER_DISPATCH(leaky_relu_backward_stub, &leaky_relu_backward_kernel);
 REGISTER_DISPATCH(softplus_stub, &softplus_kernel);
 REGISTER_DISPATCH(softplus_backward_stub, &softplus_backward_kernel);
-REGISTER_DISPATCH(glu_stub, &glu_kernel);
+// REGISTER_DISPATCH(glu_stub, &glu_kernel);
 REGISTER_DISPATCH(glu_backward_stub, &glu_backward_kernel);
 
 }}  // namespace at::native
