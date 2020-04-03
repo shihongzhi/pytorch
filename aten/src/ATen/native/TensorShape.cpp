@@ -1409,58 +1409,6 @@ Tensor unfold(const Tensor& self, int64_t dimension, int64_t size, int64_t step)
   return self.as_strided(new_size, new_stride);
 }
 
-Tensor take(const Tensor& self, LongTensor& index) {
-  
-  Tensor result = at::empty({0}, self.options());
-  result.resize_(self.sizes())
-
-  Tensor dst = result.contiguous();
-  index = index.contiguous();
-
-  AT_DISPATCH_ALL_TYPES(self.scalar_type(), "take", [&] {
-      int is_contiguous = self.is_contiguous();
-
-      auto index_data = index.dta_ptr<int64_t>();
-      auto src_data = self.data_ptr<scalar_t>();
-      auto dst_data = dst.data_ptr<scalar_t>();
-
-      auto src_elements = self.numel();
-      auto n_indices = index.numel();
-
-      // Exceptions must not be thrown across parallel sections, so we
-      // record the position of the invalid index and throw the exception after the
-      // loop.
-      std::atomic<int64_t> invalidIdxPos(-1);
-
-      at::parallel_for(0, n_indices, TH_OMP_OVERHEAD_THRESHOLD,
-          [&](int64_t start, int64_t end) {
-        for (auto i = start; i < end; i++) {
-          int64_t idx = index_data[i];
-          if (idx < src_elements && idx >= -src_elements) {
-            idx = idx < 0 ? idx + src_elements : idx;
-            if (is_contiguous) {
-              dst_data[i] = src_data[idx];
-            } else {
-              dst_data[i] = src_data[self->storage_offset() + idx];
-            }
-          } else {
-            int64_t tmp = -1;
-            invalidIdxPos.compare_exchange_strong(tmp, i);
-          }
-        }
-      });
-
-      if (invalidIdxPos >= 0) {
-        auto linear_index = index_data[invalidIdxPos];
-        TORCH_CHECK(linear_index < src_elements && linear_index >= -src_elements, "out of range: ", (int)linar_index, " out of ", (int)src_elements);
-      }
-  });
-
-  // TODO
-
-  return dst;
-}
-
 template <typename scalar_t>
 void apply_diag(Tensor& result, const Tensor& self, int64_t dimension) {
   TORCH_CHECK(self.dim() == 1 || self.dim() == 2, "matrix or a vector expected");
@@ -1513,6 +1461,58 @@ Tensor diag(const Tensor& self, int64_t dimension) {
 Tensor& diag_out(Tensor &result, const Tensor& self, int64_t dimension) {
   AT_DISPATCH_ALL_TYPES(self.scalar_type(), "diag", [&] {
     apply_diag<scalar_t>(result, self, dimension);
+  });
+  return result;
+}
+
+Tensor take(const Tensor& self, LongTensor& index) {
+  Tensor result = at::empty({0}, self.options());
+  at::take_out(result, self, index);
+
+  return result;
+}
+
+Tensor& take_out(Tensor &result, const Tensor& self, LongTensor& index) {
+  result.resize_(self.sizes());
+  result = result.contiguous();
+  index = index.contiguous();
+  AT_DISPATCH_ALL_TYPES(self.scalar_type(), "take", [&] {
+    int is_contiguous = self.is_contiguous();
+
+    auto index_data = index.data_ptr<int64_t>();
+    auto src_data = self.data_ptr<scalar_t>();
+    auto dst_data = result.data_ptr<scalar_t>();
+
+    auto src_elements = self.numel();
+    auto n_indices = index.numel();
+
+    // Exceptions must not be thrown across parallel sections, so we
+    // record the position of the invalid index and throw the exception after the
+    // loop.
+    std::atomic<int64_t> invalidIdxPos(-1);
+
+    at::parallel_for(0, n_indices, TH_OMP_OVERHEAD_THRESHOLD,
+        [&](int64_t start, int64_t end) {
+      for (auto i = start; i < end; i++) {
+        int64_t idx = index_data[i];
+        if (idx < src_elements && idx >= -src_elements) {
+          idx = idx < 0 ? idx + src_elements : idx;
+          if (is_contiguous) {
+            dst_data[i] = src_data[idx];
+          } else {
+            dst_data[i] = src_data[self.storage_offset() + idx];
+          }
+        } else {
+          int64_t tmp = -1;
+          invalidIdxPos.compare_exchange_strong(tmp, i);
+        }
+      }
+    });
+
+    if (invalidIdxPos >= 0) {
+      auto linear_index = index_data[invalidIdxPos];
+      TORCH_CHECK(linear_index < src_elements && linear_index >= -src_elements, "out of range: ", (int)linearIndex, " out of ", (int)src_elements);
+    }
   });
   return result;
 }

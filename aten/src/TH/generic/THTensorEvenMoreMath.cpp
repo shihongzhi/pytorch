@@ -318,6 +318,7 @@ static inline int64_t THTensor_(wrapLinearIndex)(int64_t linearIndex, int64_t nu
   return linearIndex < 0 ? linearIndex + numel : linearIndex;
 }
 
+
 void THTensor_(take)(THTensor *r_, THTensor *src, THLongTensor *index)
 {
   THTensor_(resizeNd)(r_, index->dim(), THTensor_getSizePtr(index), NULL);
