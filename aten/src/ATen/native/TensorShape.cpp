@@ -17,6 +17,7 @@
 #include <ATen/native/cpu/CatKernel.h>
 #include <ATen/native/Copy.h>
 #include <ATen/MemoryOverlap.h>
+#include <ATen/native/cpu/Loops.h>
 
 namespace at {
 namespace native {
@@ -1462,6 +1463,84 @@ Tensor& diag_out(Tensor &result, const Tensor& self, int64_t dimension) {
   AT_DISPATCH_ALL_TYPES(self.scalar_type(), "diag", [&] {
     apply_diag<scalar_t>(result, self, dimension);
   });
+  return result;
+}
+
+Tensor nonzero(const Tensor& self) {
+  Tensor result = at::empty({0}, self.options().dtype(kLong));
+  at::nonzero_out(result, self);
+  return result;
+}
+
+Tensor& nonzero_out(Tensor &result, const Tensor& self) {
+  TORCH_CHECK(at::isIntegralType(result.scalar_type()), "result only supports integral-point dtypes, result got: ", result.scalar_type());
+  
+  auto iter = at::TensorIterator();
+  iter.add_input(self);
+  iter.build();
+
+  AT_DISPATCH_ALL_TYPES(self.scalar_type(), "nonzero_cpu", [&] {
+#ifdef TH_REAL_IS_HALF
+#define IS_NONZERO(val) (c10::Half(0)!=val)
+#elif defined(TH_REAL_IS_BFLOAT16)
+#define IS_NONZERO(val) (c10::BFloat16(0)!=val)
+#else
+#define IS_NONZERO(val) ((val)!=0)
+#endif
+
+    int64_t numel = 0;
+    cpu_serial_kernel(iter, [&](scalar_t val) -> void { 
+      if (IS_NONZERO(val)) {
+        ++numel;
+      }
+    });
+
+    result.resize_({numel, self.dim()});
+    if (numel <= 0) {
+      return result;
+    }
+
+    int64_t dimensions = self.dim();
+    // +1 faster than additional condition check inside loop
+    int64_t *sizes = new int64_t[dimensions+1];
+    int64_t *idx = new int64_t[dimensions+1];
+    int64_t *ii;
+    int64_t *ss;
+    std::fill(idx, idx+dimensions+1, 0);
+    for (int64_t i = 0; i < dimensions; ++i) {
+      sizes[dimensions - i - 1] = self.size(i); // reverse order important
+    }
+    sizes[dimensions] = 0;
+
+    int64_t *subscript_data = result.data_ptr<int64_t>();
+    auto subscript_strides = result.strides().vec();
+    subscript_strides[0] -= subscript_strides[1] * self.dim();
+
+    cpu_serial_kernel(iter, [&](scalar_t val) -> void { 
+      if (IS_NONZERO(val)) {
+        ii = idx + dimensions;
+        for (int64_t dim = dimensions - 1; dim >= 0; dim--) {
+          --ii;
+          *subscript_data = *ii;
+          subscript_data += subscript_strides[1];
+        }
+        subscript_data += subscript_strides[0];
+      }
+      ii = idx;
+      ss = sizes;
+      ++(*ii);
+      while (*ii == *ss) {
+        *ii = 0;
+        ++ii;
+        ++ss;
+        ++(*ii);
+      }
+    });
+    delete [] sizes;
+    delete [] idx;
+#undef IS_NONZERO
+  });
+
   return result;
 }
 
